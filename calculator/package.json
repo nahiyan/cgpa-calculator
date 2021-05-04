@@ -1,0 +1,25 @@
+{
+  "name": "calculator",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "dev": "npx webpack --mode development",
+    "dev-watch": "npx webpack --mode development --watch",
+    "prod": "npx webpack --mode production",
+    "prod-watch": "npx webpack --mode production --watch"
+  },
+  "devDependencies": {
+    "autoprefixer": "^9.0",
+    "bootstrap": "^4.6.0",
+    "css-loader": "^5.2.4",
+    "elm-webpack-loader": "^8.0.0",
+    "postcss-loader": "^5.2.0",
+    "precss": "^4.0.0",
+    "sass": "^1.32.12",
+    "sass-loader": "^11.0.1",
+    "style-loader": "^2.0.0",
+    "webpack": "^5.36.2",
+    "webpack-cli": "^4.6.0"
+  }
+}
