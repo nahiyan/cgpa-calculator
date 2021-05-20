@@ -15,8 +15,6 @@ function parseCoursesTable (element) {
 
     courses.push({
       name: cells[0].innerHTML,
-      title: cells[1].innerHTML,
-      credits: parseFloat(cells[2].innerHTML),
       gradePoints: parseFloat(cells[4].innerHTML),
       creditsCounted: parseFloat(cells[5].innerHTML),
       creditsPassed: parseFloat(cells[6].innerHTML)

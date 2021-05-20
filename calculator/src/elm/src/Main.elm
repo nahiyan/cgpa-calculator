@@ -1,14 +1,13 @@
 module Main exposing (Model, init, main, update, view)
 
 import Browser
-import Debug exposing (log)
 import FormatNumber exposing (format)
 import FormatNumber.Locales exposing (Decimals(..), base)
 import Html exposing (Html, b, button, div, hr, input, span, table, tbody, td, text, textarea, th, thead, tr)
 import Html.Attributes exposing (attribute, class, value)
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (on, onClick, onInput, targetValue)
 import Json.Decode as JD
-import List.Extra exposing (removeAt, updateAt)
+import List.Extra as ListE
 
 
 
@@ -26,8 +25,6 @@ main =
 
 type alias Course =
     { name : String
-    , title : String
-    , credits : Float
     , gradePoints : Float
     , creditsCounted : Float
     , creditsPassed : Float
@@ -53,13 +50,17 @@ type Msg
     = LoadCourses
     | SetCoursesJson String
     | SetCourseName Int String
-    | SetCourseTitle Int String
-    | SetCourseCredits Int String
     | SetCourseGradePoints Int String
     | SetCourseCreditsCounted Int String
     | SetCourseCreditsPassed Int String
     | RemoveCourse Int
+    | RemoveDuplicateCourses
     | AddCourse
+
+
+type StatusError
+    = BlankCoursesList
+    | DuplicateCourses
 
 
 update : Msg -> Model -> Model
@@ -71,10 +72,8 @@ update msg model =
                     Result.withDefault []
                         (JD.decodeString
                             (JD.list
-                                (JD.map6 Course
+                                (JD.map4 Course
                                     (JD.field "name" JD.string)
-                                    (JD.field "title" JD.string)
-                                    (JD.field "credits" JD.float)
                                     (JD.field "gradePoints" JD.float)
                                     (JD.field "creditsCounted" JD.float)
                                     (JD.field "creditsPassed" JD.float)
@@ -89,28 +88,41 @@ update msg model =
             { model | coursesJson = json }
 
         SetCourseName index name ->
-            { model | courses = updateAt index (\course -> { course | name = name }) model.courses }
-
-        SetCourseTitle index title ->
-            { model | courses = updateAt index (\course -> { course | title = title }) model.courses }
-
-        SetCourseCredits index credits ->
-            { model | courses = updateAt index (\course -> { course | credits = credits |> String.toFloat |> Maybe.withDefault 0 }) model.courses }
+            { model | courses = ListE.updateAt index (\course -> { course | name = name }) model.courses }
 
         SetCourseGradePoints index gradePoints ->
-            { model | courses = updateAt index (\course -> { course | gradePoints = gradePoints |> String.toFloat |> Maybe.withDefault 0 }) model.courses }
+            { model | courses = ListE.updateAt index (\course -> { course | gradePoints = gradePoints |> String.toFloat |> Maybe.withDefault 0 }) model.courses }
 
         SetCourseCreditsCounted index creditsCounted ->
-            { model | courses = updateAt index (\course -> { course | creditsCounted = creditsCounted |> String.toFloat |> Maybe.withDefault 0 }) model.courses }
+            { model | courses = ListE.updateAt index (\course -> { course | creditsCounted = creditsCounted |> String.toFloat |> Maybe.withDefault 0 }) model.courses }
 
         SetCourseCreditsPassed index creditsPassed ->
-            { model | courses = updateAt index (\course -> { course | creditsPassed = creditsPassed |> String.toFloat |> Maybe.withDefault 0 }) model.courses }
+            { model | courses = ListE.updateAt index (\course -> { course | creditsPassed = creditsPassed |> String.toFloat |> Maybe.withDefault 0 }) model.courses }
 
         RemoveCourse index ->
-            { model | courses = model.courses |> removeAt index }
+            { model | courses = model.courses |> ListE.removeAt index }
 
         AddCourse ->
-            { model | courses = Course "New Course" "Course Title" 0 0 0 0 :: model.courses }
+            { model | courses = Course "New Course" 0 0 0 :: model.courses }
+
+        RemoveDuplicateCourses ->
+            { model
+                | courses =
+                    model.courses
+                        |> List.sortWith
+                            (\courseA courseB ->
+                                case compare courseA.gradePoints courseB.gradePoints of
+                                    LT ->
+                                        GT
+
+                                    EQ ->
+                                        EQ
+
+                                    GT ->
+                                        LT
+                            )
+                        |> ListE.uniqueBy (\course -> course.name)
+            }
 
 
 courseToHtml : Int -> Course -> Html Msg
@@ -124,25 +136,7 @@ courseToHtml index course =
             [ input
                 [ class "form-control"
                 , value course.name
-                , onInput (SetCourseName index)
-                ]
-                []
-            ]
-        , td
-            []
-            [ input
-                [ class "form-control"
-                , value course.title
-                , onInput (SetCourseTitle index)
-                ]
-                []
-            ]
-        , td
-            []
-            [ input
-                [ class "form-control"
-                , value (course.credits |> String.fromFloat)
-                , onInput (SetCourseCredits index)
+                , on "blur" (JD.map (SetCourseName index) targetValue)
                 ]
                 []
             ]
@@ -151,7 +145,7 @@ courseToHtml index course =
             [ input
                 [ class "form-control"
                 , value (course.gradePoints |> String.fromFloat)
-                , onInput (SetCourseGradePoints index)
+                , on "blur" (JD.map (SetCourseGradePoints index) targetValue)
                 ]
                 []
             ]
@@ -160,7 +154,7 @@ courseToHtml index course =
             [ input
                 [ class "form-control"
                 , value (course.creditsCounted |> String.fromFloat)
-                , onInput (SetCourseCreditsCounted index)
+                , on "blur" (JD.map (SetCourseCreditsCounted index) targetValue)
                 ]
                 []
             ]
@@ -169,7 +163,7 @@ courseToHtml index course =
             [ input
                 [ class "form-control"
                 , value (course.creditsPassed |> String.fromFloat)
-                , onInput (SetCourseCreditsPassed index)
+                , on "blur" (JD.map (SetCourseCreditsPassed index) targetValue)
                 ]
                 []
             ]
@@ -199,12 +193,6 @@ coursesToHtml courses =
                             [ text "Name" ]
                         , th
                             [ attribute "scope" "col" ]
-                            [ text "Title" ]
-                        , th
-                            [ attribute "scope" "col" ]
-                            [ text "Credits" ]
-                        , th
-                            [ attribute "scope" "col" ]
                             [ text "Grade Points" ]
                         , th
                             [ attribute "scope" "col" ]
@@ -228,10 +216,13 @@ type alias Status =
     { cgpa : Float, totalCredits : Float, totalGradePoints : Float }
 
 
-coursesToCgpa : List Course -> Status
-coursesToCgpa courses =
+coursesToStatus : List Course -> Result StatusError Status
+coursesToStatus courses =
     if courses |> List.isEmpty then
-        Status 0 0 0
+        Err BlankCoursesList
+
+    else if courses |> ListE.allDifferentBy (\course -> course.name) |> not then
+        Err DuplicateCourses
 
     else
         let
@@ -252,23 +243,40 @@ coursesToCgpa courses =
                 else
                     totalGradePoints / totalCredits
         in
-        Status cgpa totalCredits totalGradePoints
+        Ok <| Status cgpa totalCredits totalGradePoints
 
 
-statusToHtml : Status -> Html Msg
-statusToHtml status =
-    div
-        []
-        [ b [] [ text "CGPA: " ]
-        , span []
-            [ text (status.cgpa |> format { base | decimals = Exact 2 }) ]
-        , b [ class "ml-3" ] [ text "Total Credits: " ]
-        , span []
-            [ text (status.totalCredits |> format { base | decimals = Max 1 }) ]
-        , b [ class "ml-3" ] [ text "Total Grade Points: " ]
-        , span []
-            [ text (status.totalGradePoints |> format { base | decimals = Max 1 }) ]
-        ]
+statusToHtml : Result StatusError Status -> Html Msg
+statusToHtml statusResult =
+    case statusResult of
+        Err DuplicateCourses ->
+            div []
+                [ div
+                    [ class "alert alert-danger" ]
+                    [ text "There are some duplicate courses in the list." ]
+                , div
+                    [ class "alert alert-warning mb-0" ]
+                    [ text "One of the side-effects of 'Remove Duplicates' is that it'll sort the courses by their grade points. That's because it always keeps the course with the highest grade points, for which sorting is necessary." ]
+                ]
+
+        Err BlankCoursesList ->
+            div
+                [ class "alert alert-warning mb-0" ]
+                [ text "The courses list is empty. Begin by adding some courses." ]
+
+        Ok status ->
+            div
+                []
+                [ b [] [ text "CGPA: " ]
+                , span []
+                    [ text (status.cgpa |> format { base | decimals = Exact 2 }) ]
+                , b [ class "ml-3" ] [ text "Total Credits: " ]
+                , span []
+                    [ text (status.totalCredits |> format { base | decimals = Max 1 }) ]
+                , b [ class "ml-3" ] [ text "Total Grade Points: " ]
+                , span []
+                    [ text (status.totalGradePoints |> format { base | decimals = Max 1 }) ]
+                ]
 
 
 
@@ -277,6 +285,31 @@ statusToHtml status =
 
 view : Model -> Html Msg
 view model =
+    let
+        status =
+            model.courses |> coursesToStatus
+
+        statusHtml =
+            status |> statusToHtml
+
+        addCourseButton =
+            button
+                [ class "btn btn-outline-success"
+                , onClick AddCourse
+                ]
+                [ text "Add Course" ]
+
+        removeDuplicatesButton =
+            if status == Err DuplicateCourses then
+                button
+                    [ class "btn btn-outline-danger ml-1"
+                    , onClick RemoveDuplicateCourses
+                    ]
+                    [ text "Remove Duplicates" ]
+
+            else
+                text ""
+    in
     div [ class "container" ]
         [ div
             [ class "row mt-3" ]
@@ -304,19 +337,14 @@ view model =
                 [ hr
                     []
                     []
-                , model.courses |> coursesToCgpa |> statusToHtml
+                , statusHtml
                 ]
             ]
-        , div [ class "row mt-3" ]
+        , div [ class "row" ]
             [ div [ class "col-sm" ]
-                [ hr
-                    []
-                    []
-                , button
-                    [ class "btn btn-outline-success"
-                    , onClick AddCourse
-                    ]
-                    [ text "Add Course" ]
+                [ hr [] []
+                , addCourseButton
+                , removeDuplicatesButton
                 ]
             ]
         , coursesToHtml model.courses
